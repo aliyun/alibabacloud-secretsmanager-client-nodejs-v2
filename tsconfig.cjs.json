@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "node16",
+    "module": "node16",
+    "outDir": "./dist/cjs"
+  },
+  "include": ["src"],
+  "exclude": ["src/__tests__"]
+}
