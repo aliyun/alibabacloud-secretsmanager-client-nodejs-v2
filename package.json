@@ -1,0 +1,66 @@
+{
+  "name": "alibabacloud-secretsmanager-client-v2",
+  "version": "0.0.1",
+  "description": "Alibaba Cloud Secrets Manager Client V2 for Node.js",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./index.js",
+      "types": "./dist/cjs/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+
+    "compile": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
+  },
+  "files": [
+    "index.js",
+    "dist/**/*",
+    "src/**/*",
+    "!src/**/__tests__/**/*",
+    "!src/**/__mocks__/**/*",
+    "!**/*.test.*",
+    "!**/*.spec.*"
+  ],
+  "author": "Alibaba Cloud",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aliyun/alibabacloud-secretsmanager-client-nodejs-v2.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aliyun/alibabacloud-secretsmanager-client-nodejs-v2/issues"
+  },
+  "homepage": "https://github.com/aliyun/alibabacloud-secretsmanager-client-nodejs-v2#readme",
+  "dependencies": {
+    "@alicloud/kms20160120": "^2.4.0",
+    "@alicloud/openapi-client": "^0.4.15",
+    "axios": "^1.6.0",
+    "crypto-js": "^4.2.0",
+    "fs-extra": "^11.1.1",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.2.0",
+    "@types/fs-extra": "^11.0.4",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^16.18.0",
+    "jest": "^30.2.0",
+    "prettier": "^3.3.1",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.2.2"
+  }
+}
