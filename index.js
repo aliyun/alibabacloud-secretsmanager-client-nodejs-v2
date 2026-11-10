@@ -7,11 +7,12 @@ try {
   exportedMembers = require('./dist/cjs/index.js');
 } catch (error) {
   if (error.code === 'MODULE_NOT_FOUND') {
-    console.error('构建产物未找到，请先运行 npm run build');
-    process.exit(1);
-  } else {
-    throw error;
+    // 库代码不能杀掉宿主进程：抛错让调用方可捕获、可判断
+    throw new Error(
+      `构建产物未找到，请先运行 npm run build（原始错误: ${error.message}）`,
+    );
   }
+  throw error;
 }
 
 const {
@@ -31,7 +32,13 @@ const {
   CacheClientConstant,
   RegionInfo,
   UserAgentManager,
-  BackoffUtils
+  BackoffUtils,
+  MAuth,
+  AuthConfig,
+  SecretManagerClientWithBearer,
+  ECSInstanceIdentity,
+  ACKOidcJwt,
+  ClientKey,
 } = exportedMembers;
 
 module.exports = {
@@ -52,4 +59,10 @@ module.exports = {
   RegionInfo,
   UserAgentManager,
   BackoffUtils,
+  MAuth,
+  AuthConfig,
+  SecretManagerClientWithBearer,
+  ECSInstanceIdentity,
+  ACKOidcJwt,
+  ClientKey,
 };

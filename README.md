@@ -238,6 +238,89 @@ async function example() {
 example();
 ```
 
+* Build Secrets Manager Client by ECS instance identity
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder,
+  RegionInfo
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withECSInstanceIdentity('#aapArn#')
+        .addRegionInfo(new RegionInfo('#regionId#', undefined, true))
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
+* Build Secrets Manager Client by ACK OIDC JWT
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder,
+  RegionInfo
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withACKOidcJwt('#aapArn#', '#oidcTokenFilePath#')
+        .addRegionInfo(new RegionInfo('#regionId#', undefined, true))
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
+* Build Secrets Manager Client by ClientKey
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withClientKey('#clientKeyPrivateKeyPath#', '#clientKeyPasswordFilePath#')
+        .withRegion('#regionId#')
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
 ### CommonJS Usage Example
 
 ```javascript

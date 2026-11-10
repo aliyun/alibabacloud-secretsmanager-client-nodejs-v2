@@ -61,6 +61,26 @@ export class CommonLogger {
     this.logger.trace(`[${this.modeName}] ${format}`, ...parameters);
   }
 
+  /**
+   * 以下 debug/info/warn/error 为非 f 后缀别名，
+   * 使 CommonLogger 可直接满足 mauth logger.Wrapper 接口
+   */
+  debug(format: string, ...parameters: any[]): void {
+    this.debugf(format, ...parameters);
+  }
+
+  info(format: string, ...parameters: any[]): void {
+    this.infof(format, ...parameters);
+  }
+
+  warn(format: string, ...parameters: any[]): void {
+    this.warnf(format, ...parameters);
+  }
+
+  error(format: string, ...parameters: any[]): void {
+    this.errorf(format, ...parameters);
+  }
+
   infof(format: string, ...parameters: any[]): void {
     this.logger.info(`[${this.modeName}] ${format}`, ...parameters);
   }

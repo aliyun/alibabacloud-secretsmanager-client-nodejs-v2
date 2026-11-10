@@ -36,6 +36,13 @@ describe("CredentialsProviderUtils", () => {
     expect(provider).toBeDefined();
   });
 
+  test("should create default credential chain provider", () => {
+    const provider = CredentialsProviderUtils.withDefaultCredential();
+    expect(provider).toBeDefined();
+    expect(typeof provider.getCredentials).toBe("function");
+    expect(provider.getProviderName()).toBe("default");
+  });
+
   test("should create OIDC role ARN credentials provider with full parameters", () => {
     const provider = CredentialsProviderUtils.withOIDCRoleArn(
       "testSession",
@@ -177,5 +184,225 @@ describe("CredentialsProviderUtils", () => {
 
     const result = CredentialsProviderUtils.initCredential(emptyMap, "test");
     expect(result).toBeUndefined();
+  });
+});
+
+describe("CredentialsProviderUtils.initMAuthConfig", () => {
+  test("TestInitMAuthConfig_ClientKey_WithEnvPassword", () => {
+    const envName = "TEST_CLIENT_KEY_PASSWORD_ENV";
+    process.env[envName] = "test_password_from_env";
+
+    try {
+      const configMap: Record<string, string> = {
+        [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+          CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY,
+        [CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY]:
+          "/path/to/client_key.json",
+        [CacheClientConstant
+          .VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY]: envName,
+      };
+
+      const cfg = CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      );
+      expect(cfg).toBeDefined();
+      expect(cfg?.authMethod).toBe("ClientKey");
+      expect(cfg?.clientKeyConfigPath).toBe("/path/to/client_key.json");
+      expect(cfg?.clientKeyPassword).toBe("test_password_from_env");
+      // 可选字段未设置时为 undefined
+      expect(cfg?.clientKeyPasswordPath).toBeUndefined();
+    } finally {
+      delete process.env[envName];
+    }
+  });
+
+  test("TestInitMAuthConfig_ClientKey_WithEnvPassword_NotSet", () => {
+    delete process.env["TEST_CLIENT_KEY_PASSWORD_NOT_SET"];
+
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY]:
+        "/path/to/client_key.json",
+      [CacheClientConstant
+        .VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY]:
+        "TEST_CLIENT_KEY_PASSWORD_NOT_SET",
+    };
+
+    expect(() =>
+      CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      ),
+    ).toThrow(
+      new RegExp(
+        `${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY}.*${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY}`,
+      ),
+    );
+  });
+
+  test("TestInitMAuthConfig_ClientKey_WithPasswordPath", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY]:
+        "/path/to/client_key.json",
+      [CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY]:
+        "/path/to/password",
+    };
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeDefined();
+    expect(cfg?.clientKeyPasswordPath).toBe("/path/to/password");
+    // 可选字段未设置时为 undefined
+    expect(cfg?.clientKeyPassword).toBeUndefined();
+  });
+
+  test("TestInitMAuthConfig_ClientKey_MissingPassword", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY]:
+        "/path/to/client_key.json",
+    };
+
+    expect(() =>
+      CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      ),
+    ).toThrow(
+      new RegExp(
+        `${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY}.*${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY}`,
+      ),
+    );
+  });
+
+  test("TestInitMAuthConfig_ClientKey_MissingConfigPath", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY,
+      [CacheClientConstant
+        .VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY]: "TEST_PWD",
+    };
+
+    expect(() =>
+      CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      ),
+    ).toThrow(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY,
+    );
+  });
+
+  test("TestInitMAuthConfig_ACKOidcJwt_Success", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY]: "arn:test:aap",
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TOKEN_PATH_KEY]:
+        "/path/to/token",
+    };
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeDefined();
+    expect(cfg?.authMethod).toBe("ACKOidcJwt");
+    expect(cfg?.aapArn).toBe("arn:test:aap");
+    expect(cfg?.tokenPath).toBe("/path/to/token");
+  });
+
+  test("TestInitMAuthConfig_ACKOidcJwt_MissingAapArn", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TOKEN_PATH_KEY]:
+        "/path/to/token",
+    };
+
+    expect(() =>
+      CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      ),
+    ).toThrow(CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY);
+  });
+
+  test("TestInitMAuthConfig_ACKOidcJwt_MissingTokenPath", () => {
+    // ACKOidcJwt 分支的校验不检查 TokenPath：tokenPath 可选
+    // （缺省时使用 DefaultACKTokenPath），配置校验不报错。
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY]: "arn:test:aap",
+    };
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeDefined();
+    expect(cfg?.authMethod).toBe("ACKOidcJwt");
+    expect(cfg?.aapArn).toBe("arn:test:aap");
+    expect(cfg?.tokenPath).toBeUndefined();
+  });
+
+  test("TestInitMAuthConfig_ECSInstanceIdentity_Success", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ECS_INSTANCE_IDENTITY,
+      [CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY]: "arn:test:aap",
+    };
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeDefined();
+    expect(cfg?.authMethod).toBe("ECSInstanceIdentity");
+    expect(cfg?.aapArn).toBe("arn:test:aap");
+  });
+
+  test("TestInitMAuthConfig_ECSInstanceIdentity_MissingAapArn", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]:
+        CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ECS_INSTANCE_IDENTITY,
+    };
+
+    expect(() =>
+      CredentialsProviderUtils.initMAuthConfig(
+        configMap,
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      ),
+    ).toThrow(CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY);
+  });
+
+  test("TestInitMAuthConfig_EmptyCredentialsType", () => {
+    const configMap: Record<string, string> = {};
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeUndefined();
+  });
+
+  test("TestInitMAuthConfig_UnsupportedCredentialsType", () => {
+    const configMap: Record<string, string> = {
+      [CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY]: "unsupported_type",
+    };
+
+    const cfg = CredentialsProviderUtils.initMAuthConfig(
+      configMap,
+      CacheClientConstant.SOURCE_TYPE_CONFIG,
+    );
+    expect(cfg).toBeUndefined();
   });
 });

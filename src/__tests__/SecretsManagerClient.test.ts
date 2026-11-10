@@ -1,4 +1,8 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { SecretCacheClient } from "../SecretCacheClient";
+import { DefaultSecretManagerClientBuilder } from "../service/DefaultSecretManagerClientBuilder";
 import { SecretInfo } from "../model/SecretInfo";
 import { CacheSecretInfo } from "../model/CacheSecretInfo";
 import { CacheSecretStoreStrategy } from "../cache/CacheSecretStoreStrategy";
@@ -429,5 +433,247 @@ describe("SecretCacheClient", () => {
       const isExpired = (client as any).judgeCacheExpire(cacheSecretInfo);
       expect(isExpired).toBe(false);
     });
+  });
+});
+
+// 以下为 SecretManagerClient 的 mauth 相关 6 个增量用例。
+// 注意：ConfigUtils.loadConfig 只按文件名在固定位置（cwd/config、cwd、
+// ~/.aliyun、~）搜索，不支持绝对路径，因此 properties 配置文件需写入
+// process.cwd() 并使用唯一文件名（与 ConfigUtils.test.ts 约定一致）；
+// client key / password / token 文件仍使用 os.tmpdir() 绝对路径。
+describe("DefaultSecretManagerClient mauth init", () => {
+  const tempDirs: string[] = [];
+  const cwdFiles: string[] = [];
+  const savedEnv: Map<string, string | undefined> = new Map();
+
+  function createTempFile(prefix: string, content?: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    tempDirs.push(dir);
+    const file = path.join(dir, "temp_file");
+    fs.writeFileSync(file, content ?? "");
+    return file;
+  }
+
+  function createCwdProperties(content: string): string {
+    const name = `secretsmanager-mauth-test-${process.pid}-${Date.now()}-${Math.floor(
+      Math.random() * 1e6,
+    )}.properties`;
+    const file = path.join(process.cwd(), name);
+    fs.writeFileSync(file, content);
+    cwdFiles.push(file);
+    return name;
+  }
+
+  function setEnv(key: string, value: string): void {
+    if (!savedEnv.has(key)) {
+      savedEnv.set(key, process.env[key]);
+    }
+    process.env[key] = value;
+  }
+
+  afterEach(() => {
+    // 恢复环境变量
+    for (const [key, value] of savedEnv.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    savedEnv.clear();
+    // 清理 cwd 下的 properties 文件
+    while (cwdFiles.length > 0) {
+      const file = cwdFiles.pop();
+      if (file) {
+        try {
+          fs.unlinkSync(file);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    // 清理临时目录
+    while (tempDirs.length > 0) {
+      const dir = tempDirs.pop();
+      if (dir) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  });
+
+  test("TestInitMAuthConfigFromConfigFile_ClientKey_EnvPassword", async () => {
+    const tmpClientKeyFile = createTempFile("client_key_");
+    const configName = createCwdProperties(
+      CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY +
+        "=client_key\n" +
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY +
+        "=" +
+        tmpClientKeyFile +
+        "\n" +
+        CacheClientConstant
+          .VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY +
+        "=TEST_MAUTH_CLIENT_KEY_PWD\n" +
+        CacheClientConstant.VARIABLE_CACHE_CLIENT_REGION_ID_KEY +
+        '=[{"regionId":"cn-hangzhou"}]\n',
+    );
+    setEnv("TEST_MAUTH_CLIENT_KEY_PWD", "test_env_password");
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.withCustomConfigFile(configName);
+    const client = builder.build();
+
+    await client.init();
+    try {
+      const mauthConfig = (client as any).mauthConfig;
+      expect(mauthConfig).toBeDefined();
+      expect(mauthConfig.authMethod).toBe("ClientKey");
+      expect(mauthConfig.clientKeyConfigPath).toBe(tmpClientKeyFile);
+      expect(mauthConfig.clientKeyPassword).toBe("test_env_password");
+    } finally {
+      client.close();
+    }
+  });
+
+  test("TestInitMAuthConfigFromEnv_ClientKey_EnvPassword", async () => {
+    const tmpClientKeyFile = createTempFile("client_key_");
+    setEnv(CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY, "client_key");
+    setEnv(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY,
+      tmpClientKeyFile,
+    );
+    setEnv(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY,
+      "TEST_ENV_CLIENT_KEY_PWD",
+    );
+    setEnv("TEST_ENV_CLIENT_KEY_PWD", "env_password_value");
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.addRegion("cn-hangzhou");
+    const client = builder.build();
+
+    await client.init();
+    try {
+      const mauthConfig = (client as any).mauthConfig;
+      expect(mauthConfig).toBeDefined();
+      expect(mauthConfig.clientKeyPassword).toBe("env_password_value");
+    } finally {
+      client.close();
+    }
+  });
+
+  test("TestInitMAuthConfigFromConfigFile_ClientKey_PasswordPath", async () => {
+    const tmpClientKeyFile = createTempFile("client_key_");
+    const tmpPwdFile = createTempFile("password_");
+    const configName = createCwdProperties(
+      CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY +
+        "=client_key\n" +
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY +
+        "=" +
+        tmpClientKeyFile +
+        "\n" +
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY +
+        "=" +
+        tmpPwdFile +
+        "\n" +
+        CacheClientConstant.VARIABLE_CACHE_CLIENT_REGION_ID_KEY +
+        '=[{"regionId":"cn-hangzhou"}]\n',
+    );
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.withCustomConfigFile(configName);
+    const client = builder.build();
+
+    await client.init();
+    try {
+      const mauthConfig = (client as any).mauthConfig;
+      expect(mauthConfig).toBeDefined();
+      expect(mauthConfig.clientKeyPasswordPath).toBe(tmpPwdFile);
+      // 可选字段未设置时为 undefined
+      expect(mauthConfig.clientKeyPassword).toBeUndefined();
+    } finally {
+      client.close();
+    }
+  });
+
+  test("TestInitMAuthConfigFromConfigFile_ACKOidcJwt", async () => {
+    const tmpTokenFile = createTempFile(
+      "token_",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.test_signature",
+    );
+    const configName = createCwdProperties(
+      CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY +
+        "=ack_oidc_jwt\n" +
+        CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY +
+        "=arn:test:aap\n" +
+        CacheClientConstant.VARIABLE_CREDENTIALS_TOKEN_PATH_KEY +
+        "=" +
+        tmpTokenFile +
+        "\n" +
+        CacheClientConstant.VARIABLE_CACHE_CLIENT_REGION_ID_KEY +
+        '=[{"regionId":"cn-hangzhou"}]\n',
+    );
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.withCustomConfigFile(configName);
+    const client = builder.build();
+
+    await client.init();
+    try {
+      const mauthConfig = (client as any).mauthConfig;
+      expect(mauthConfig).toBeDefined();
+      expect(mauthConfig.authMethod).toBe("ACKOidcJwt");
+    } finally {
+      client.close();
+    }
+  });
+
+  test("TestInitMAuthConfigFromEnv_ECSInstanceIdentity", async () => {
+    setEnv(
+      CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY,
+      "ecs_instance_identity",
+    );
+    setEnv(CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY, "arn:test:aap");
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.addRegion("cn-hangzhou");
+    const client = builder.build();
+
+    await client.init();
+    try {
+      const mauthConfig = (client as any).mauthConfig;
+      expect(mauthConfig).toBeDefined();
+      expect(mauthConfig.authMethod).toBe("ECSInstanceIdentity");
+    } finally {
+      client.close();
+    }
+  });
+
+  test("TestInitMAuthConfigFromEnv_ClientKey_EnvPasswordNotSet", async () => {
+    const tmpClientKeyFile = createTempFile("client_key_");
+    setEnv(CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY, "client_key");
+    setEnv(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY,
+      tmpClientKeyFile,
+    );
+    setEnv(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY,
+      "TEST_NOT_SET_PWD",
+    );
+    if (!savedEnv.has("TEST_NOT_SET_PWD")) {
+      savedEnv.set("TEST_NOT_SET_PWD", process.env["TEST_NOT_SET_PWD"]);
+    }
+    delete process.env["TEST_NOT_SET_PWD"];
+
+    const builder = new DefaultSecretManagerClientBuilder();
+    builder.addRegion("cn-hangzhou");
+    const client = builder.build();
+
+    await expect(client.init()).rejects.toThrow(
+      CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY,
+    );
   });
 });

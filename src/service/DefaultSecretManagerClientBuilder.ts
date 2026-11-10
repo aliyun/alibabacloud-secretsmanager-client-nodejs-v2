@@ -21,6 +21,14 @@ import { CredentialsPropertiesUtils } from "../utils/CredentialsPropertiesUtils"
 import { FullJitterBackoffStrategy } from "./FullJitterBackoffStrategy";
 import { AlibabaCloudError } from "@alicloud/openapi-core";
 import * as credentials from "@alicloud/credentials";
+import { MAuth } from "../mauth/MAuth";
+import {
+  ACKOidcJwt,
+  AuthConfig,
+  ClientKey,
+  ECSInstanceIdentity,
+} from "../mauth/config/Config";
+import { SecretManagerClientWithBearer } from "./SecretManagerClientBearer";
 /**
  * 默认Secret Manager客户端构建器
  */
@@ -30,6 +38,7 @@ export class DefaultSecretManagerClientBuilder extends BaseSecretManagerClientBu
   private provider!: credentials.CredentialsProvider;
   private backoffStrategy?: BackoffStrategy;
   private customConfigFile?: string;
+  private mauthConfig?: AuthConfig; // mauth认证配置
 
   /**
    * 设置访问阿里云的AccessKey
@@ -130,6 +139,54 @@ export class DefaultSecretManagerClientBuilder extends BaseSecretManagerClientBu
   }
 
   /**
+   * 使用ClientKey配置认证信息
+   * @param clientKeyConfigPath 客户端密钥配置文件路径
+   * @param clientKeyPasswordPath 客户端密钥密码文件路径
+   * @returns DefaultSecretManagerClientBuilder实例
+   */
+  withClientKey(
+    clientKeyConfigPath: string,
+    clientKeyPasswordPath: string,
+  ): DefaultSecretManagerClientBuilder {
+    this.mauthConfig = new AuthConfig();
+    this.mauthConfig.authMethod = ClientKey;
+    this.mauthConfig.clientKeyConfigPath = clientKeyConfigPath;
+    this.mauthConfig.clientKeyPasswordPath = clientKeyPasswordPath;
+    return this;
+  }
+
+  /**
+   * 使用ACK OIDC JWT配置认证信息
+   * @param aapArn 应用访问点ARN
+   * @param tokenPath OIDC令牌文件路径
+   * @returns DefaultSecretManagerClientBuilder实例
+   */
+  withACKOidcJwt(
+    aapArn: string,
+    tokenPath: string,
+  ): DefaultSecretManagerClientBuilder {
+    this.mauthConfig = new AuthConfig();
+    this.mauthConfig.authMethod = ACKOidcJwt;
+    this.mauthConfig.aapArn = aapArn;
+    this.mauthConfig.tokenPath = tokenPath;
+    return this;
+  }
+
+  /**
+   * 使用ECS实例身份配置认证信息
+   * @param aapArn 应用访问点ARN
+   * @returns DefaultSecretManagerClientBuilder实例
+   */
+  withECSInstanceIdentity(
+    aapArn: string,
+  ): DefaultSecretManagerClientBuilder {
+    this.mauthConfig = new AuthConfig();
+    this.mauthConfig.authMethod = ECSInstanceIdentity;
+    this.mauthConfig.aapArn = aapArn;
+    return this;
+  }
+
+  /**
    * 构建SecretManagerClient实例
    * @returns SecretManagerClient实例
    */
@@ -140,6 +197,7 @@ export class DefaultSecretManagerClientBuilder extends BaseSecretManagerClientBu
       this.backoffStrategy,
       this.configMap,
       this.customConfigFile,
+      this.mauthConfig,
     );
   }
 }
@@ -154,6 +212,9 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
   private backoffStrategy?: BackoffStrategy;
   private configMap: Map<RegionInfo, Config> = new Map();
   private readonly customConfigFile?: string;
+  private mauthConfig?: AuthConfig; // mauth认证配置
+  // 以regionId为key的bearer认证客户端
+  private bearerClients?: Map<string, SecretManagerClientWithBearer>;
 
   constructor(
     regionInfos: RegionInfo[] = [],
@@ -161,12 +222,14 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
     backoffStrategy?: BackoffStrategy,
     configMap: Map<RegionInfo, Config> = new Map(),
     customConfigFile?: string,
+    mauthConfig?: AuthConfig,
   ) {
     this.regionInfos = regionInfos;
     this.provider = provider;
     this.backoffStrategy = backoffStrategy;
     this.configMap = configMap;
     this.customConfigFile = customConfigFile;
+    this.mauthConfig = mauthConfig;
   }
 
   async init(): Promise<void> {
@@ -190,6 +253,25 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
           index ===
           self.findIndex((r) => r.getRegionId() === region.getRegionId()),
       );
+    }
+    if (this.mauthConfig) {
+      // mauth 认证方式：为每个地域构建 bearer 认证客户端，跳过常规 client 初始化
+      this.bearerClients = new Map<string, SecretManagerClientWithBearer>();
+      for (const regionInfo of this.regionInfos) {
+        const mauthObj = MAuth.fromRegion(
+          this.mauthConfig,
+          regionInfo,
+          // 未注册时回退默认日志
+          CommonLogger.isRegistered(CacheClientConstant.MODE_NAME)
+            ? CommonLogger.getCommonLogger(CacheClientConstant.MODE_NAME)
+            : undefined,
+        );
+        this.bearerClients.set(
+          regionInfo.getRegionId(),
+          new SecretManagerClientWithBearer(mauthObj),
+        );
+      }
+      return;
     }
     if (this.regionInfos.length > 1) {
       this.regionInfos = await this.sortRegionInfos(this.regionInfos);
@@ -428,6 +510,11 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
     regionInfo: RegionInfo,
     req: GetSecretValueRequest,
   ): Promise<GetSecretValueResponse> {
+    // mauth 认证方式优先路由到 bearer 认证客户端
+    const bc = this.bearerClients?.get(regionInfo.getRegionId());
+    if (bc) {
+      return await bc.getSecretValue(regionInfo, req);
+    }
     const client = await this.getClient(regionInfo);
     return await client.getSecretValue(req);
   }
@@ -500,6 +587,11 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
   }
 
   close(): void {
+    if (this.bearerClients) {
+      for (const bc of this.bearerClients.values()) {
+        bc.close();
+      }
+    }
     this.clientMap.clear();
     this.regionInfos = [];
   }
@@ -527,6 +619,10 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
       if (credentialsProperties.regionInfoList) {
         this.regionInfos.push(...credentialsProperties.regionInfoList);
       }
+      this.initMAuthConfig(
+        credentialsProperties.sourceProperties ?? {},
+        CacheClientConstant.SOURCE_TYPE_CONFIG,
+      );
     }
   }
 
@@ -534,6 +630,25 @@ export class DefaultSecretManagerClient implements SecretManagerClient {
     const envMap = process.env;
     this.initKmsRegionsFromEnv(envMap);
     this.initCredentialsProviderFromEnv(envMap);
+    const properties: Record<string, string> = {};
+    for (const [key, value] of Object.entries(envMap)) {
+      if (value) {
+        properties[key] = value;
+      }
+    }
+    this.initMAuthConfig(properties, CacheClientConstant.SOURCE_TYPE_ENV);
+  }
+
+  private initMAuthConfig(
+    properties: Record<string, string>,
+    sourceType: string,
+  ): void {
+    if (!this.mauthConfig) {
+      this.mauthConfig = CredentialsProviderUtils.initMAuthConfig(
+        properties,
+        sourceType,
+      );
+    }
   }
 
   private initCredentialsProviderFromEnv(envMap: NodeJS.ProcessEnv): void {
