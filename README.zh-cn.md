@@ -239,6 +239,89 @@ async function example() {
 example();
 ```
 
+* 通过ECS实例身份方式构建客户端
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder,
+  RegionInfo
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withECSInstanceIdentity('#aapArn#')
+        .addRegionInfo(new RegionInfo('#regionId#', undefined, true))
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
+* 通过ACK OIDC JWT方式构建客户端
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder,
+  RegionInfo
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withACKOidcJwt('#aapArn#', '#oidcTokenFilePath#')
+        .addRegionInfo(new RegionInfo('#regionId#', undefined, true))
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
+* 通过ClientKey方式构建客户端
+
+```javascript
+import {
+  SecretCacheClientBuilder,
+  BaseSecretManagerClientBuilder
+} from 'alibabacloud-secretsmanager-client-v2';
+
+async function example() {
+  try {
+    const client = await SecretCacheClientBuilder.newCacheClientBuilder(
+      BaseSecretManagerClientBuilder.standard()
+        .withClientKey('#clientKeyPrivateKeyPath#', '#clientKeyPasswordFilePath#')
+        .withRegion('#regionId#')
+        .build()
+    ).build();
+
+    const secretInfo = await client.getSecretInfo('#secretName#');
+    console.log(secretInfo);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+example();
+```
+
 ### CommonJS 使用示例
 
 ```javascript

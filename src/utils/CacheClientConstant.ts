@@ -6,7 +6,7 @@ export class CacheClientConstant {
   static readonly MODE_NAME = "SecretsManagerClientV2";
 
   // 项目版本
-  static readonly PROJECT_VERSION = "2.0.0";
+  static readonly PROJECT_VERSION = "2.0.1";
 
   // Secrets Manager Client Nodejs V2的User Agent
   static readonly USER_AGENT_OF_SECRETS_MANAGER_V2_NODEJS =
@@ -49,6 +49,47 @@ export class CacheClientConstant {
 
   // 凭据类型配置键名
   static readonly VARIABLE_CREDENTIALS_TYPE_KEY = "credentials_type";
+
+  // AccessKey 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_ACCESS_KEY = "ak";
+
+  // ECS RAM Role 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_ECS_RAM_ROLE = "ecs_ram_role";
+
+  // OIDC Role ARN 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_OIDC_ROLE_ARN = "oidc_role_arn";
+
+  // mauth ClientKey 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY = "client_key";
+
+  // mauth ACK OIDC JWT 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT = "ack_oidc_jwt";
+
+  // mauth ECS Instance Identity 凭据类型值
+  static readonly VARIABLE_CREDENTIALS_TYPE_ECS_INSTANCE_IDENTITY =
+    "ecs_instance_identity";
+
+  // mauth AAP ARN配置键名
+  static readonly VARIABLE_CREDENTIALS_AAP_ARN_KEY = "aap_arn";
+
+  // mauth令牌路径配置键名
+  static readonly VARIABLE_CREDENTIALS_TOKEN_PATH_KEY = "token_path";
+
+  // mauth ClientKey配置文件路径配置键名
+  static readonly VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY =
+    "client_key_private_key_path";
+
+  // mauth ClientKey密码配置键名
+  static readonly VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_KEY =
+    "client_key_password";
+
+  // mauth ClientKey密码环境变量名称配置键名
+  static readonly VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY =
+    "client_key_password_from_env_variable";
+
+  // mauth ClientKey密码文件路径配置键名
+  static readonly VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY =
+    "client_key_password_from_file_path";
 
   // AccessKey ID配置键名
   static readonly VARIABLE_CREDENTIALS_ACCESS_KEY_ID_KEY =
@@ -126,4 +167,8 @@ export class CacheClientConstant {
 
   // ECONNREFUSED 错误码
   static readonly ECONNREFUSED_ERROR_CODE = "ECONNREFUSED";
+
+  // 无效的AccessKeyId错误码
+  static readonly ERROR_CODE_INVALID_ACCESS_KEY_ID_NOT_FOUND =
+    "InvalidAccessKeyId.NotFound";
 }

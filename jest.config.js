@@ -21,6 +21,7 @@ module.exports = {
     'src/**/*.ts',
     '!src/index.ts',
     '!src/main.ts',
+    '!src/__tests__/**',
   ],
   roots: ['<rootDir>/src'],
   testMatch: [
@@ -34,6 +35,7 @@ module.exports = {
     '<rootDir>/build/',
     '<rootDir>/coverage/',
     '<rootDir>/src/__tests__/__mocks__/',
+    '<rootDir>/src/__tests__/helpers/',
     '(/__tests__|/tests__)/.*\\\.d\\.ts$'
   ],
   coverageThreshold: {

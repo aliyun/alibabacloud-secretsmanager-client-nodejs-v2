@@ -7,8 +7,13 @@ export class RegionInfo {
   private vpc?: boolean;
   private caFilePath?: string;
 
+  /**
+   * @param regionId 地域 ID；缺省为空串，
+   *                 可先无参构造再经 setRegionId 补值；build 时由
+   *                 checkRegionInfo 校验空值并抛错
+   */
   constructor(
-    regionId: string,
+    regionId: string = "",
     endpoint?: string,
     vpc?: boolean,
     caFilePath?: string,

@@ -1,11 +1,18 @@
 import { CacheClientConstant } from "./CacheClientConstant";
 import { RegionInfo } from "../model/RegionInfo";
 import {
+  DefaultCredentialsProvider,
   ECSRAMRoleCredentialsProvider,
   CredentialsProvider,
   StaticAKCredentialsProvider,
   OIDCRoleArnCredentialsProvider,
 } from "@alicloud/credentials";
+import {
+  ACKOidcJwt,
+  AuthConfig,
+  ClientKey,
+  ECSInstanceIdentity,
+} from "../mauth/config/Config";
 
 /**
  * 凭证提供者工具类
@@ -25,6 +32,16 @@ export class CredentialsProviderUtils {
       .withAccessKeyId(accessKeyId)
       .withAccessKeySecret(accessKeySecret)
       .build();
+  }
+
+  /**
+   * 使用阿里云默认凭据链创建凭证提供者
+   * （环境变量 → 配置文件 → ECS RAM 角色 → OIDC → URI 等，
+   * 见 https://help.aliyun.com/zh/sdk/developer-reference/v2-manage-access-credentials）
+   * @returns 凭证提供者
+   */
+  static withDefaultCredential(): CredentialsProvider {
+    return DefaultCredentialsProvider.builder().build();
   }
 
   /**
@@ -109,7 +126,7 @@ export class CredentialsProviderUtils {
 
     let provider: CredentialsProvider;
     switch (credentialsType) {
-      case "ak":
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACCESS_KEY:
         const accessKeyId =
           map[CacheClientConstant.VARIABLE_CREDENTIALS_ACCESS_KEY_ID_KEY];
         const accessSecret =
@@ -129,7 +146,7 @@ export class CredentialsProviderUtils {
           accessSecret,
         );
         break;
-      case "ecs_ram_role":
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ECS_RAM_ROLE:
         const roleName =
           map[CacheClientConstant.VARIABLE_CREDENTIALS_ROLE_NAME_KEY];
         if (!roleName) {
@@ -139,7 +156,7 @@ export class CredentialsProviderUtils {
         }
         provider = CredentialsProviderUtils.withEcsRamRole(roleName);
         break;
-      case "oidc_role_arn":
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_OIDC_ROLE_ARN:
         const roleSessionExpiration = parseInt(
           map[
             CacheClientConstant.VARIABLE_CREDENTIALS_OIDC_DURATION_SECONDS_KEY
@@ -174,12 +191,110 @@ export class CredentialsProviderUtils {
           stsRegionId,
         );
         break;
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY:
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT:
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ECS_INSTANCE_IDENTITY:
+        // mauth 认证方式，不创建 CredentialsProvider，由 initMAuthConfig 负责解析配置
+        return undefined;
       default:
         throw new Error(
           `${sourceTypeName} credentials type[${credentialsType}] is illegal`,
         );
     }
     return provider;
+  }
+
+  /**
+   * 初始化mauth认证配置
+   * @param configMap 配置映射
+   * @param sourceTypeName 来源类型名称
+   * @returns mauth认证配置（非 mauth 凭据类型时返回 undefined）
+   */
+  static initMAuthConfig(
+    configMap: Record<string, string>,
+    sourceTypeName: string,
+  ): AuthConfig | undefined {
+    const credentialsType =
+      configMap[CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_KEY];
+    if (!credentialsType) {
+      return undefined;
+    }
+
+    let authMethod: string;
+    switch (credentialsType) {
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_CLIENT_KEY:
+        authMethod = ClientKey;
+        break;
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ACK_OIDC_JWT:
+        authMethod = ACKOidcJwt;
+        break;
+      case CacheClientConstant.VARIABLE_CREDENTIALS_TYPE_ECS_INSTANCE_IDENTITY:
+        authMethod = ECSInstanceIdentity;
+        break;
+      default:
+        return undefined;
+    }
+
+    let clientKeyPassword =
+      configMap[
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_KEY
+      ];
+    const clientKeyPasswordEnvName =
+      configMap[
+        CacheClientConstant
+          .VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY
+      ];
+    if (clientKeyPasswordEnvName) {
+      // 环境变量未设置时返回空字符串
+      clientKeyPassword = process.env[clientKeyPasswordEnvName] ?? "";
+    }
+
+    const cfg = new AuthConfig();
+    cfg.authMethod = authMethod;
+    cfg.aapArn =
+      configMap[CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY];
+    cfg.tokenPath =
+      configMap[CacheClientConstant.VARIABLE_CREDENTIALS_TOKEN_PATH_KEY];
+    cfg.clientKeyConfigPath =
+      configMap[
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY
+      ];
+    cfg.clientKeyPassword = clientKeyPassword;
+    cfg.clientKeyPasswordPath =
+      configMap[
+        CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY
+      ];
+
+    switch (authMethod) {
+      case ACKOidcJwt:
+        if (!cfg.aapArn) {
+          throw new Error(
+            `${sourceTypeName} credentials missing required parameters[${CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY}]`,
+          );
+        }
+        break;
+      case ECSInstanceIdentity:
+        if (!cfg.aapArn) {
+          throw new Error(
+            `${sourceTypeName} credentials missing required parameters[${CacheClientConstant.VARIABLE_CREDENTIALS_AAP_ARN_KEY}]`,
+          );
+        }
+        break;
+      case ClientKey:
+        if (!cfg.clientKeyConfigPath) {
+          throw new Error(
+            `${sourceTypeName} credentials missing required parameters[${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_CONFIG_PATH_KEY}]`,
+          );
+        }
+        if (!cfg.clientKeyPassword && !cfg.clientKeyPasswordPath) {
+          throw new Error(
+            `${sourceTypeName} credentials missing required parameters[${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_ENV_NAME_KEY} or ${CacheClientConstant.VARIABLE_CREDENTIALS_CLIENT_KEY_PASSWORD_PATH_KEY}]`,
+          );
+        }
+        break;
+    }
+
+    return cfg;
   }
 
   /**
