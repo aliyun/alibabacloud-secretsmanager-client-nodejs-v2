@@ -6,7 +6,7 @@ export class CacheClientConstant {
   static readonly MODE_NAME = "SecretsManagerClientV2";
 
   // 项目版本
-  static readonly PROJECT_VERSION = "2.0.1";
+  static readonly PROJECT_VERSION = "2.0.2";
 
   // Secrets Manager Client Nodejs V2的User Agent
   static readonly USER_AGENT_OF_SECRETS_MANAGER_V2_NODEJS =
