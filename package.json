@@ -1,6 +1,6 @@
 {
   "name": "alibabacloud-secretsmanager-client-v2",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Alibaba Cloud Secrets Manager Client V2 for Node.js",
   "engines": {
     "node": ">=16.0.0"
@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.cjs.json",
+    "prepublishOnly": "npm run build",
 
     "compile": "tsc --noEmit",
     "test": "jest",
